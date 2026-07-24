@@ -881,6 +881,18 @@
         <div class="stat-label">总市值合计（万亿）</div>
         <div class="stat-value" id="statCap">--</div>
       </div>
+      <div class="stat-card">
+        <div class="stat-label">上证指数</div>
+        <div class="stat-value" id="idxSH">--</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">创业板指</div>
+        <div class="stat-value" id="idxCY">--</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">科创50</div>
+        <div class="stat-value" id="idxKC">--</div>
+      </div>
     </div>
 
     <!-- ====== 筛选和操作栏 ====== -->
@@ -984,6 +996,7 @@
 
       allData = stockData;
       updateTime();
+      fetchIndices();
       buildFilterOptions();
       applyAll();
       renderTable();
@@ -1001,6 +1014,34 @@
       } else {
         el.textContent = new Date().toLocaleString("zh-CN");
       }
+    }
+
+    function fetchIndices() {
+      var xhr = new XMLHttpRequest();
+      xhr.open("GET", "https://qt.gtimg.cn/q=sh000001,sz399006,sh000688", true);
+      xhr.onload = function () {
+        if (xhr.status === 200) {
+          var lines = xhr.responseText.split("\n");
+          for (var i = 0; i < lines.length; i++) {
+            var line = lines[i];
+            if (line.indexOf("=") < 0) continue;
+            var raw = line.split("=\"")[1].replace(/";?$/, "");
+            var fields = raw.split("~");
+            var name = fields[1];
+            var chg = parseFloat(fields[32]);
+            var txt = (chg >= 0 ? "+" : "") + chg.toFixed(2) + "%";
+            var cls = chg >= 0 ? "up" : "down";
+            if (name === "上证指数") setIdx("idxSH", txt, cls);
+            else if (name === "创业板指") setIdx("idxCY", txt, cls);
+            else if (name === "科创50") setIdx("idxKC", txt, cls);
+          }
+        }
+      };
+      xhr.send();
+    }
+    function setIdx(id, txt, cls) {
+      var el = document.getElementById(id);
+      if (el) { el.textContent = txt; el.className = "stat-value " + cls; }
     }
 
     // ============================================================
