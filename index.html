@@ -1,0 +1,1809 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>📊 A股行情数据看板</title>
+  <!-- SheetJS 用于Excel导出 -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <style>
+    /* ============================================================
+       基础样式 — 中老年股民友好：大字体、高对比度、简洁布局
+       ============================================================ */
+    :root {
+      --bg: #f5f3ef;
+      --card-bg: #ffffff;
+      --primary: #1a3a5c;
+      --primary-light: #2c5f8a;
+      --up-color: #d43030;
+      --down-color: #1a9c3e;
+      --text: #1a1a1a;
+      --text-secondary: #555555;
+      --border: #e0dcd5;
+      --row-stripe: #faf9f7;
+      --row-hover: #f0ede6;
+      --shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+      --radius: 10px;
+      --font-size-base: 16px;
+      --font-size-lg: 18px;
+      --font-size-xl: 22px;
+      --font-size-2xl: 28px;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Helvetica Neue", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: var(--font-size-base);
+      line-height: 1.6;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ============================================================
+       页面容器
+       ============================================================ */
+    .app-container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px 24px 40px;
+    }
+
+    /* ============================================================
+       顶部标题栏
+       ============================================================ */
+    .header {
+      background: var(--primary);
+      color: #ffffff;
+      padding: 20px 28px;
+      border-radius: var(--radius);
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      box-shadow: 0 3px 12px rgba(26, 58, 92, 0.15);
+    }
+
+    .header-title {
+      font-size: var(--font-size-2xl);
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+
+    .header-meta {
+      font-size: var(--font-size-base);
+      opacity: 0.9;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .update-time {
+      background: rgba(255, 255, 255, 0.15);
+      padding: 6px 14px;
+      border-radius: 6px;
+    }
+
+    /* ============================================================
+       统计卡片栏
+       ============================================================ */
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    .stat-card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      box-shadow: var(--shadow);
+      text-align: center;
+      border-left: 4px solid var(--primary);
+    }
+
+    .stat-card.up {
+      border-left-color: var(--up-color);
+    }
+
+    .stat-card.down {
+      border-left-color: var(--down-color);
+    }
+
+    .stat-card.cap {
+      border-left-color: #e67e22;
+    }
+
+    .stat-label {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: var(--font-size-xl);
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .stat-value.up {
+      color: var(--up-color);
+    }
+
+    .stat-value.down {
+      color: var(--down-color);
+    }
+
+    /* ============================================================
+       筛选和操作栏
+       ============================================================ */
+    .toolbar {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      margin-bottom: 16px;
+      box-shadow: var(--shadow);
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .toolbar label {
+      font-size: var(--font-size-base);
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      margin-right: -4px;
+    }
+
+    .toolbar select {
+      font-size: var(--font-size-base);
+      padding: 9px 36px 9px 12px;
+      border: 2px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      cursor: pointer;
+      min-width: 170px;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23555' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      transition: border-color 0.2s;
+    }
+
+    .toolbar select:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    .toolbar .spacer {
+      flex: 1;
+    }
+
+    .btn-download {
+      background: #f57c00;
+      border: none;
+      padding: 9px 24px;
+      border-radius: 6px;
+      font-size: 18px;
+      font-weight: 700;
+      color: #ffffff;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+      white-space: nowrap;
+      box-shadow: 0 2px 6px rgba(245,124,0,0.35);
+    }
+
+    .btn-download:hover {
+      background: #e65100;
+      box-shadow: 0 3px 10px rgba(245,124,0,0.5);
+    }
+
+    .btn-download:active {
+      transform: scale(0.97);
+    }
+
+    .btn-download.locked {
+      background: #999;
+      cursor: not-allowed;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    }
+    .btn-download.locked:hover {
+      background: #999;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    }
+
+    /* 会员登录按钮 */
+    .btn-login {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      padding: 9px 20px;
+      border-radius: 6px;
+      font-size: var(--font-size-base);
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      white-space: nowrap;
+    }
+    .btn-login:hover { background: var(--primary-light); }
+
+    .member-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #e8f5e9;
+      color: #2e7d32;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .member-badge .logout-link {
+      color: #c62828;
+      cursor: pointer;
+      font-size: 12px;
+      text-decoration: underline;
+      margin-left: 4px;
+    }
+
+    /* 登录弹窗 */
+    .login-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 999;
+      justify-content: center;
+      align-items: center;
+    }
+    .login-overlay.show { display: flex; }
+
+    .login-dialog {
+      background: #fff;
+      border-radius: 12px;
+      padding: 30px;
+      width: 360px;
+      max-width: 90vw;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      text-align: center;
+    }
+    .login-dialog h3 {
+      margin: 0 0 8px;
+      font-size: 20px;
+      color: var(--primary);
+    }
+    .login-dialog .subtitle {
+      color: var(--text-secondary);
+      font-size: 14px;
+      margin-bottom: 20px;
+    }
+    .login-dialog input[type="password"] {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      font-size: 16px;
+      text-align: center;
+      box-sizing: border-box;
+    }
+    .login-dialog input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+    .login-dialog .login-error {
+      color: #c62828;
+      font-size: 13px;
+      margin-top: 8px;
+      display: none;
+    }
+    .login-dialog .btn-submit {
+      margin-top: 16px;
+      width: 100%;
+      padding: 12px;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .login-dialog .btn-submit:hover { background: var(--primary-light); }
+    .login-dialog .btn-cancel {
+      margin-top: 8px;
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .btn-reset {
+      background: #fff;
+      color: var(--text);
+      border: 2px solid var(--border);
+      padding: 9px 20px;
+      border-radius: 6px;
+      font-size: var(--font-size-base);
+      cursor: pointer;
+      transition: border-color 0.2s;
+      white-space: nowrap;
+    }
+
+    .btn-reset:hover {
+      border-color: var(--primary);
+    }
+
+    .search-input {
+      font-size: var(--font-size-base);
+      padding: 9px 14px;
+      border: 2px solid var(--border);
+      border-radius: 6px;
+      width: 200px;
+      color: var(--text);
+      transition: border-color 0.2s;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    .search-input::placeholder {
+      color: #aaa;
+    }
+
+    .result-count {
+      font-size: var(--font-size-base);
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+
+    .result-count strong {
+      color: var(--primary);
+    }
+
+    /* ============================================================
+       数据表格
+       ============================================================ */
+    .table-wrapper {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .table-scroll {
+      overflow-x: auto;
+      max-height: 70vh;
+      overflow-y: auto;
+    }
+
+    table {
+      width: 100%;
+      min-width: 1700px;
+      border-collapse: collapse;
+      font-size: var(--font-size-base);
+      white-space: nowrap;
+    }
+
+    thead {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    thead th {
+      background: var(--primary);
+      color: #fff;
+      padding: 10px 5px;
+      font-weight: 600;
+      cursor: pointer;
+      user-select: none;
+      text-align: center;
+      transition: background 0.2s;
+      position: relative;
+      font-size: 14px;
+    }
+
+    thead th:hover {
+      background: var(--primary-light);
+    }
+
+    thead th .sort-icon {
+      display: inline-block;
+      margin-left: 6px;
+      font-size: 12px;
+      opacity: 0.5;
+    }
+
+    thead th.sorted .sort-icon {
+      opacity: 1;
+    }
+
+    thead th.sorted-asc .sort-icon::after {
+      content: " ▲";
+    }
+
+    thead th.sorted-desc .sort-icon::after {
+      content: " ▼";
+    }
+
+    tbody td {
+      padding: 7px 5px;
+      text-align: center;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+    }
+
+    tbody tr:nth-child(even) {
+      background: var(--row-stripe);
+    }
+
+    tbody tr:hover {
+      background: var(--row-hover);
+    }
+
+    td.industry {
+      color: var(--text-secondary);
+      font-size: 14px;
+      max-width: 70px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    td.code {
+      font-family: "Consolas", "Monaco", "Courier New", monospace;
+      color: var(--text-secondary);
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 1px;
+    }
+
+    td.name {
+      font-weight: 600;
+      font-size: 15px;
+      max-width: 70px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    td.price {
+      font-weight: 600;
+    }
+
+    td.change-up {
+      color: var(--up-color);
+      font-weight: 600;
+    }
+
+    td.change-down {
+      color: var(--down-color);
+      font-weight: 600;
+    }
+
+    td.change-zero {
+      color: var(--text-secondary);
+    }
+
+    td.cap {
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+
+    td.pe {
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ROE / 预测净利 / 预测同比 — 列间距和列宽缩小一半 */
+    td.roe, td.forecast-profit, td.forecast-yoy {
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      padding-left: 2px;
+      padding-right: 2px;
+      max-width: 58px;
+    }
+
+    td.ytd-up {
+      color: var(--up-color);
+      font-weight: 600;
+    }
+
+    td.ytd-down {
+      color: var(--down-color);
+      font-weight: 600;
+    }
+
+    td.ytd-zero {
+      color: var(--text-secondary);
+    }
+
+    td.no-data {
+      color: #ccc;
+      font-style: italic;
+    }
+
+    /* ============================================================
+       底部
+       ============================================================ */
+    .footer {
+      text-align: center;
+      padding: 24px;
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+
+    /* ============================================================
+       加载状态
+       ============================================================ */
+    .loading-overlay {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 20px;
+      color: var(--text-secondary);
+      font-size: var(--font-size-lg);
+    }
+
+    .loading-spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 16px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .error-message {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--up-color);
+      font-size: var(--font-size-lg);
+    }
+
+    .error-message .retry-link {
+      color: var(--primary);
+      cursor: pointer;
+      text-decoration: underline;
+      margin-top: 12px;
+      display: inline-block;
+    }
+
+    /* ============================================================
+       行业层级对照表
+       ============================================================ */
+    .industry-hierarchy {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      margin-top: 20px;
+      overflow: hidden;
+    }
+
+    .hierarchy-header {
+      background: linear-gradient(135deg, var(--primary) 0%, #2c5f8a 100%);
+      color: #fff;
+      padding: 12px 20px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      user-select: none;
+    }
+
+    .hierarchy-header:hover {
+      background: linear-gradient(135deg, var(--primary-light) 0%, #3a7cb0 100%);
+    }
+
+    .hierarchy-stats {
+      font-size: 16px;
+      font-weight: 500;
+      opacity: 0.95;
+      margin-left: auto;
+      background: rgba(255,255,255,0.18);
+      padding: 3px 14px;
+      border-radius: 10px;
+    }
+
+    .hierarchy-toggle {
+      font-size: 12px;
+      transition: transform 0.3s;
+      display: inline-block;
+    }
+
+    .hierarchy-toggle.open {
+      transform: rotate(90deg);
+    }
+
+    .hierarchy-body {
+      padding: 6px 20px 10px;
+    }
+
+    .hierarchy-body.collapsed {
+      display: none;
+    }
+
+    /* 每个一级行业一行 */
+    .hierarchy-row {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 2px 14px;
+      padding: 11px 0;
+      border-bottom: 1px solid #f0ede6;
+    }
+
+    .hierarchy-row:last-child {
+      border-bottom: none;
+    }
+
+    .hierarchy-l1-label {
+      font-weight: 700;
+      color: var(--primary);
+      font-size: 16px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      margin-right: 2px;
+    }
+
+    /* 二级行业小标签 */
+    .hierarchy-l2-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 15px;
+      color: var(--text);
+      padding: 2px 8px;
+      border-radius: 4px;
+      white-space: nowrap;
+      transition: background 0.15s;
+      cursor: default;
+      position: relative;
+    }
+
+    .hierarchy-l2-chip:hover {
+      background: #f0ede6;
+    }
+
+    .hierarchy-l2-chip .l3-count {
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+      background: var(--primary-light);
+      padding: 1px 7px;
+      border-radius: 10px;
+      min-width: 22px;
+      text-align: center;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+
+    .hierarchy-l2-chip .l3-count:hover {
+      background: var(--primary);
+      transform: scale(1.1);
+    }
+
+    .hierarchy-l2-chip .l3-count.active {
+      background: #f57c00;
+    }
+
+    /* 三级行业浮动弹窗 */
+    .hierarchy-popover {
+      position: fixed;
+      background: #fff;
+      border: 1px solid #d0d0d0;
+      border-radius: 8px;
+      padding: 12px 14px;
+      box-shadow: 0 4px 22px rgba(0,0,0,0.18);
+      z-index: 1000;
+      max-width: 360px;
+      display: none;
+    }
+
+    .hierarchy-popover.show {
+      display: block;
+    }
+
+    .hierarchy-popover .popover-arrow {
+      position: absolute;
+      top: -8px;
+      left: 20px;
+      width: 14px;
+      height: 14px;
+      background: #fff;
+      border-left: 1px solid #d0d0d0;
+      border-top: 1px solid #d0d0d0;
+      transform: rotate(45deg);
+    }
+
+    .hierarchy-popover .popover-content {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 6px;
+    }
+
+    .hierarchy-popover .l3-tag {
+      display: inline-block;
+      background: #eef2f7;
+      color: #555;
+      padding: 2px 10px;
+      border-radius: 4px;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 768px) {
+    }
+
+    /* ============================================================
+       提示信息浮层
+       ============================================================ */
+    .toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--primary);
+      color: #fff;
+      padding: 12px 28px;
+      border-radius: 8px;
+      font-size: var(--font-size-base);
+      font-weight: 600;
+      z-index: 1000;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+    }
+
+    .toast.show {
+      opacity: 1;
+    }
+
+    /* ============================================================
+       响应式适配
+       ============================================================ */
+    @media (max-width: 768px) {
+      .app-container {
+        padding: 10px 12px 24px;
+      }
+
+      .header {
+        padding: 14px 16px;
+      }
+
+      .header-title {
+        font-size: var(--font-size-xl);
+      }
+
+      .stats-bar {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+      }
+
+      .stat-card {
+        padding: 12px 14px;
+      }
+
+      .stat-value {
+        font-size: var(--font-size-lg);
+      }
+
+      .toolbar {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .toolbar select,
+      .search-input {
+        width: 100%;
+        min-width: 0;
+      }
+
+      table {
+        font-size: 14px;
+      }
+
+      thead th,
+      tbody td {
+        padding: 8px 10px;
+      }
+    }
+
+    /* 打印样式 */
+    @media print {
+      .header,
+      .toolbar,
+      .footer,
+      .toast {
+        display: none;
+      }
+      .table-wrapper {
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <!-- ====== 顶部标题栏 ====== -->
+    <div class="header">
+      <div class="header-title">📊 A股行情数据看板</div>
+      <div class="header-meta">
+        <span class="update-time">更新：<span id="updateTime">加载中...</span></span>
+        <button class="btn-download locked" onclick="handleDownload()" id="btnDownload">🔒 下载 Excel</button>
+        <button class="btn-login" onclick="showLogin()" id="btnLogin">会员登录</button>
+        <span class="member-badge" id="memberBadge" style="display:none">
+          ✅ 会员 <span class="logout-link" onclick="doLogout()">退出</span>
+        </span>
+      </div>
+    </div>
+
+    <!-- ====== 统计卡片栏 ====== -->
+    <div class="stats-bar" id="statsBar">
+      <div class="stat-card">
+        <div class="stat-label">股票总数</div>
+        <div class="stat-value" id="statTotal">--</div>
+      </div>
+      <div class="stat-card up">
+        <div class="stat-label">上涨家数</div>
+        <div class="stat-value up" id="statUp">--</div>
+      </div>
+      <div class="stat-card down">
+        <div class="stat-label">下跌家数</div>
+        <div class="stat-value down" id="statDown">--</div>
+      </div>
+      <div class="stat-card cap">
+        <div class="stat-label">总市值合计（万亿）</div>
+        <div class="stat-value" id="statCap">--</div>
+      </div>
+    </div>
+
+    <!-- ====== 筛选和操作栏 ====== -->
+    <div class="toolbar" id="toolbar">
+      <label>一级行业：</label>
+      <select id="filterL1" onchange="onFilterL1Change()">
+        <option value="">全部</option>
+      </select>
+      <label>二级行业：</label>
+      <select id="filterL2" onchange="onFilterL2Change()">
+        <option value="">全部</option>
+      </select>
+      <label>三级行业：</label>
+      <select id="filterL3" onchange="onFilterL3Change()">
+        <option value="">全部</option>
+      </select>
+      <span class="spacer"></span>
+      <input type="text" class="search-input" id="searchInput" placeholder="输入代码或名称搜索..." oninput="onSearch()">
+      <span class="result-count">显示 <strong id="resultCount">0</strong> 条</span>
+      <button class="btn-reset" onclick="resetFilters()">重置筛选</button>
+    </div>
+
+    <!-- ====== 数据表格 ====== -->
+    <div class="table-wrapper">
+      <div class="table-scroll" id="tableContainer">
+        <div class="loading-overlay">
+          <div class="loading-spinner"></div>
+          <span>正在加载数据...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== 行业对照表 ====== -->
+    <div class="industry-hierarchy" id="hierarchyPanel">
+      <div class="hierarchy-header" onclick="toggleHierarchy()">
+        <span class="hierarchy-toggle open" id="hierarchyToggle">&#9654;</span>
+        <span>行业对照表——一、二、三级行业对照</span>
+        <span class="hierarchy-stats" id="hierarchyStats"></span>
+      </div>
+      <div class="hierarchy-body" id="hierarchyBody">
+        <div class="loading-overlay" style="padding:30px"><span>正在生成行业对照表...</span></div>
+      </div>
+    </div>
+
+    <!-- ====== 底部 ====== -->
+    <div class="footer">
+      数据来源：沪深京交易所 | 请注意核实数据，仅供学习参考，不构成投资建议
+    </div>
+
+    <!-- ====== 三级行业浮动弹窗 ====== -->
+    <div class="hierarchy-popover" id="hierarchyPopover">
+      <div class="popover-arrow"></div>
+      <div class="popover-content" id="popoverContent"></div>
+    </div>
+
+    <!-- ====== 会员登录弹窗 ====== -->
+    <div class="login-overlay" id="loginOverlay" onclick="if(event.target===this)hideLogin()">
+      <div class="login-dialog">
+        <h3>🔐 会员登录</h3>
+        <div class="subtitle">输入密码解锁 Excel 下载权限</div>
+        <input type="password" id="loginPwd" placeholder="请输入会员密码" onkeydown="if(event.key==='Enter')doLogin()">
+        <div class="login-error" id="loginError">密码错误，请重试</div>
+        <button class="btn-submit" onclick="doLogin()">登 录</button>
+        <button class="btn-cancel" onclick="hideLogin()">取消</button>
+      </div>
+    </div>
+
+    <!-- ====== 提示浮层 ====== -->
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <!-- ====== 数据引用 ====== -->
+  <script src="data.js"></script>
+
+  <!-- ====== 主逻辑 ====== -->
+  <script>
+  (function () {
+    "use strict";
+
+    // ============================================================
+    // 全局状态
+    // ============================================================
+    let allData = [];          // 原始数据
+    let filteredData = [];     // 当前筛选后数据
+    let sortKey = "default"; // 默认排序：一二三级行业升序 + 同行业内总市值降序
+    let sortAsc = true;       // 升序
+    let currentL1 = "";       // 当前选中的一级行业
+    let currentL2 = "";       // 当前选中的二级行业
+    let currentL3 = "";       // 当前选中的三级行业
+    let currentSearch = "";   // 搜索关键词
+
+    // ============================================================
+    // 初始化
+    // ============================================================
+    function init() {
+      // 检查数据是否加载
+      if (typeof stockData === "undefined") {
+        showError("数据文件加载失败，请确保 data.js 存在或重新运行 fetch_data.py 生成数据。");
+        return;
+      }
+
+      allData = stockData;
+      updateTime();
+      buildFilterOptions();
+      applyAll();
+      renderTable();
+      renderHierarchy();
+      updateUI();
+    }
+
+    // ============================================================
+    // 更新时间显示
+    // ============================================================
+    function updateTime() {
+      var el = document.getElementById("updateTime");
+      if (typeof DATA_UPDATE_TIME !== "undefined") {
+        el.textContent = DATA_UPDATE_TIME;
+      } else {
+        el.textContent = new Date().toLocaleString("zh-CN");
+      }
+    }
+
+    // ============================================================
+    // 构建筛选下拉菜单选项
+    // ============================================================
+    // 行业排序：含"其他"的排最后，其余按总市值降序
+    function sortIndustriesByCap(names, capMap) {
+      return names.sort(function (a, b) {
+        var aOther = a.indexOf("其他") >= 0 ? 1 : 0;
+        var bOther = b.indexOf("其他") >= 0 ? 1 : 0;
+        if (aOther !== bOther) return aOther - bOther;
+        return (capMap[b] || 0) - (capMap[a] || 0);
+      });
+    }
+
+    function buildFilterOptions() {
+      // 收集所有行业值
+      var industries1 = new Set();
+      var industryMap12 = {}; // L1 -> Set of L2
+      var industryMap23 = {}; // L2 -> Set of L3
+      var l1CapMap = {};
+      var l2CapMap = {};
+      var l3CapMap = {};
+
+      allData.forEach(function (item) {
+        var l1 = (item.industry1 || "").trim();
+        var l2 = (item.industry2 || "").trim();
+        var l3 = (item.industry3 || "").trim();
+        var cap = item.cap || 0;
+
+        if (l1) industries1.add(l1);
+        if (l1 && l2) {
+          if (!industryMap12[l1]) industryMap12[l1] = new Set();
+          industryMap12[l1].add(l2);
+        }
+        if (l2 && l3) {
+          if (!industryMap23[l2]) industryMap23[l2] = new Set();
+          industryMap23[l2].add(l3);
+        }
+        // 累计各级行业总市值（用于排序）
+        if (l1) l1CapMap[l1] = (l1CapMap[l1] || 0) + cap;
+        if (l2) l2CapMap[l2] = (l2CapMap[l2] || 0) + cap;
+        if (l3) l3CapMap[l3] = (l3CapMap[l3] || 0) + cap;
+      });
+
+      // 填充一级行业下拉菜单（按市值降序，"其他"排末尾）
+      var sel1 = document.getElementById("filterL1");
+      var sorted1 = sortIndustriesByCap(Array.from(industries1), l1CapMap);
+      sorted1.forEach(function (ind) {
+        var opt = document.createElement("option");
+        opt.value = ind;
+        opt.textContent = ind;
+        sel1.appendChild(opt);
+      });
+
+      // 储存映射关系和市值数据
+      window._industryMap12 = industryMap12;
+      window._industryMap23 = industryMap23;
+      window._l1CapMap = l1CapMap;
+      window._l2CapMap = l2CapMap;
+      window._l3CapMap = l3CapMap;
+    }
+
+    // ============================================================
+    // 筛选联动
+    // ============================================================
+    function onFilterL1Change() {
+      var l1 = document.getElementById("filterL1").value;
+      currentL1 = l1;
+      updateL2Options(l1);
+      applyAll();
+      renderTable();
+    }
+
+    function onFilterL2Change() {
+      var l2 = document.getElementById("filterL2").value;
+      currentL2 = l2;
+      updateL3Options(l2);
+      applyAll();
+      renderTable();
+    }
+
+    function onFilterL3Change() {
+      currentL3 = document.getElementById("filterL3").value;
+      applyAll();
+      renderTable();
+    }
+
+    function updateL2Options(l1) {
+      var sel2 = document.getElementById("filterL2");
+      sel2.innerHTML = '<option value="">全部</option>';
+      if (l1 && window._industryMap12 && window._industryMap12[l1]) {
+        var l2Set = window._industryMap12[l1];
+        sortIndustriesByCap(Array.from(l2Set), window._l2CapMap || {}).forEach(function (l2) {
+          var opt = document.createElement("option");
+          opt.value = l2;
+          opt.textContent = l2;
+          sel2.appendChild(opt);
+        });
+      }
+      updateL3Options("");
+    }
+
+    function updateL3Options(l2) {
+      var sel3 = document.getElementById("filterL3");
+      sel3.innerHTML = '<option value="">全部</option>';
+      if (l2 && window._industryMap23 && window._industryMap23[l2]) {
+        var l3Set = window._industryMap23[l2];
+        sortIndustriesByCap(Array.from(l3Set), window._l3CapMap || {}).forEach(function (l3) {
+          var opt = document.createElement("option");
+          opt.value = l3;
+          opt.textContent = l3;
+          sel3.appendChild(opt);
+        });
+      }
+    }
+
+    // ============================================================
+    // 重置筛选
+    // ============================================================
+    function resetFilters() {
+      document.getElementById("filterL1").value = "";
+      document.getElementById("filterL2").innerHTML = '<option value="">全部</option>';
+      document.getElementById("filterL3").innerHTML = '<option value="">全部</option>';
+      document.getElementById("searchInput").value = "";
+      currentL1 = "";
+      currentL2 = "";
+      currentL3 = "";
+      currentSearch = "";
+      sortKey = "default";
+      sortAsc = true;
+      applyAll();
+      renderTable();
+      showToast("筛选已重置");
+    }
+
+    // ============================================================
+    // 关键词搜索
+    // ============================================================
+    function onSearch() {
+      currentSearch = document.getElementById("searchInput").value;
+      applyAll();
+      renderTable();
+    }
+
+    // ============================================================
+    // 数据过滤
+    // ============================================================
+    function applyFilters() {
+      var kw = currentSearch.trim().toLowerCase();
+      filteredData = allData.filter(function (item) {
+        if (currentL1) {
+          if ((item.industry1 || "").trim() !== currentL1) return false;
+        }
+        if (currentL2) {
+          if ((item.industry2 || "").trim() !== currentL2) return false;
+        }
+        if (currentL3) {
+          if ((item.industry3 || "").trim() !== currentL3) return false;
+        }
+        if (kw) {
+          // 搜索代码或名称（拼音首字母暂不支持，匹配纯代码或名称即可）
+          var code = (item.code || "").toLowerCase();
+          var name = (item.name || "").toLowerCase();
+          if (code.indexOf(kw) === -1 && name.indexOf(kw) === -1) return false;
+        }
+        return true;
+      });
+    }
+
+    // ============================================================
+    // 排序
+    // ============================================================
+    function applySort() {
+      if (sortKey === "default") {
+        // 默认排序：一级行业→二级行业→三级行业，均按总市值降序（大行业优先），同行业内个股市值降序
+        var capL1 = window._l1CapMap || {};
+        var capL2 = window._l2CapMap || {};
+        var capL3 = window._l3CapMap || {};
+        filteredData.sort(function (a, b) {
+          var a1 = (a.industry1 || "").trim();
+          var b1 = (b.industry1 || "").trim();
+          if (!a1 && !b1) { /* both empty, compare below */ }
+          else if (!a1) return 1;
+          else if (!b1) return -1;
+          else if (a1 !== b1) return (capL1[b1] || 0) - (capL1[a1] || 0);
+
+          var a2 = (a.industry2 || "").trim();
+          var b2 = (b.industry2 || "").trim();
+          if (!a2 && !b2) { /* both empty */ }
+          else if (!a2) return 1;
+          else if (!b2) return -1;
+          else if (a2 !== b2) return (capL2[b2] || 0) - (capL2[a2] || 0);
+
+          var a3 = (a.industry3 || "").trim();
+          var b3 = (b.industry3 || "").trim();
+          if (!a3 && !b3) { /* both empty */ }
+          else if (!a3) return 1;
+          else if (!b3) return -1;
+          else if (a3 !== b3) return (capL3[b3] || 0) - (capL3[a3] || 0);
+
+          // 同三级行业内按个股总市值降序
+          return (b.cap || 0) - (a.cap || 0);
+        });
+      } else {
+        filteredData.sort(function (a, b) {
+          var va = getSortValue(a, sortKey);
+          var vb = getSortValue(b, sortKey);
+
+          if (va < vb) return sortAsc ? -1 : 1;
+          if (va > vb) return sortAsc ? 1 : -1;
+
+          // 二级排序：相同值按代码排序
+          if (a.code < b.code) return -1;
+          if (a.code > b.code) return 1;
+          return 0;
+        });
+      }
+    }
+
+    function getSortValue(item, key) {
+      switch (key) {
+        case "code": return item.code;
+        case "name": return item.name;
+        case "price": return item.price || 0;
+        case "change": return item.change || 0;
+        case "industry1": return (item.industry1 || "zzzz").trim();
+        case "industry2": return (item.industry2 || "zzzz").trim();
+        case "industry3": return (item.industry3 || "zzzz").trim();
+        case "concept": return (item.concept || "zzzz").trim();
+        case "biz": return (item.biz || "zzzz").trim();
+        case "cap": return item.cap || 0;
+        case "pe": return item.pe || 0;
+        case "roe": return item.roe || 0;
+        case "forecastProfit": return item.forecastProfit || 0;
+        case "forecastEps": return item.forecastEps || 0;
+        case "forecastYoy": return item.forecastYoy || 0;
+        case "ytd": return item.ytd || 0;
+        default: return item.code;
+      }
+    }
+
+    // ============================================================
+    // 组合过滤+排序+统计
+    // ============================================================
+    function applyAll() {
+      applyFilters();
+      applySort();
+      updateStats();
+      updateResultCount();
+    }
+
+    // ============================================================
+    // 更新统计卡片
+    // ============================================================
+    function updateStats() {
+      var total = allData.length;
+      var upCount = 0;
+      var downCount = 0;
+      var totalCap = 0;
+
+      allData.forEach(function (item) {
+        if (item.change > 0) upCount++;
+        if (item.change < 0) downCount++;
+        totalCap += item.cap || 0;
+      });
+
+      document.getElementById("statTotal").textContent = total;
+      document.getElementById("statUp").textContent = upCount;
+      document.getElementById("statDown").textContent = downCount;
+      var capTrillion = (totalCap / 10000).toFixed(2);
+      document.getElementById("statCap").textContent = capTrillion;
+    }
+
+    function updateResultCount() {
+      document.getElementById("resultCount").textContent = filteredData.length;
+    }
+
+    // ============================================================
+    // 表格渲染
+    // ============================================================
+    function renderTable() {
+      var container = document.getElementById("tableContainer");
+
+      if (filteredData.length === 0) {
+        container.innerHTML = '<div class="loading-overlay"><span>没有匹配的数据</span></div>';
+        return;
+      }
+
+      var html = '<table><thead><tr>';
+
+      // 表头定义
+      var columns = [
+        { key: "industry1", label: "一级行业", classes: "" },
+        { key: "industry2", label: "二级行业", classes: "" },
+        { key: "industry3", label: "三级行业", classes: "" },
+        { key: "code", label: "代码", classes: "" },
+        { key: "name", label: "名称", classes: "" },
+        { key: "concept", label: "热门概念", classes: "" },
+        { key: "biz", label: "主营构成", classes: "" },
+        { key: "price", label: "收盘价", classes: "" },
+        { key: "change", label: "涨跌幅(%)", classes: "" },
+        { key: "ytd", label: "年初至今(%)", classes: "" },
+        { key: "pe", label: "PE(TTM)", classes: "" },
+        { key: "roe", label: "ROE(%)", classes: "" },
+        { key: "forecastProfit", label: "2026预测净利(亿)", classes: "" },
+        { key: "forecastYoy", label: "2026预测同比(%)", classes: "" },
+        { key: "cap", label: "总市值(亿)", classes: "" },
+      ];
+
+      columns.forEach(function (col) {
+        var cls = "sortable";
+        if (sortKey === col.key) {
+          cls += sortAsc ? " sorted sorted-asc" : " sorted sorted-desc";
+        }
+        html += '<th class="' + cls + '" onclick="sortBy(\'' + col.key + '\')">'
+          + col.label + '<span class="sort-icon"></span></th>';
+      });
+
+      html += "</tr></thead><tbody>";
+
+      filteredData.forEach(function (item) {
+        html += "<tr>";
+
+        // 行业（带 tooltip）
+        var ind1 = item.industry1 || "--";
+        var ind2 = item.industry2 || "--";
+        var ind3 = item.industry3 || "--";
+        html += '<td class="industry" title="' + escapeAttr(ind1) + '">' + escapeHtml(ind1) + "</td>";
+        html += '<td class="industry" title="' + escapeAttr(ind2) + '">' + escapeHtml(ind2) + "</td>";
+        html += '<td class="industry" title="' + escapeAttr(ind3) + '">' + escapeHtml(ind3) + "</td>";
+
+        // 代码和名称
+        html += '<td class="code">' + escapeHtml(item.code) + "</td>";
+        html += '<td class="name" title="' + escapeAttr(item.name) + '">' + escapeHtml(item.name) + "</td>";
+
+        // 热门概念（带 tooltip）
+        var concept = item.concept || "--";
+        html += '<td class="industry" title="' + escapeAttr(concept) + '">' + escapeHtml(concept) + "</td>";
+
+        // 主营构成（带 tooltip）
+        var biz = item.biz || "--";
+        html += '<td class="industry" title="' + escapeAttr(biz) + '">' + escapeHtml(biz) + "</td>";
+
+        // 收盘价
+        if (item.price && item.price > 0) {
+          html += '<td class="price">' + item.price.toFixed(2) + "</td>";
+        } else {
+          html += '<td class="no-data">--</td>';
+        }
+
+        // 涨跌幅
+        if (item.change > 0) {
+          html += '<td class="change-up">+' + item.change.toFixed(2) + "%</td>";
+        } else if (item.change < 0) {
+          html += '<td class="change-down">' + item.change.toFixed(2) + "%</td>";
+        } else if (item.price > 0) {
+          html += '<td class="change-zero">0.00%</td>';
+        } else {
+          html += '<td class="no-data">--</td>';
+        }
+
+        // 年初至今涨幅
+        var ytd = item.ytd;
+        if (ytd > 0) {
+          html += '<td class="ytd-up">+' + ytd.toFixed(2) + "%</td>";
+        } else if (ytd < 0) {
+          html += '<td class="ytd-down">' + ytd.toFixed(2) + "%</td>";
+        } else if (item.price > 0) {
+          html += '<td class="ytd-zero">0.00%</td>';
+        } else {
+          html += '<td class="no-data">--</td>';
+        }
+
+        // PE(TTM)
+        if (item.pe && item.pe > 0) {
+          html += '<td class="pe">' + item.pe.toFixed(2) + "</td>";
+        } else {
+          html += '<td class="no-data">--</td>';
+        }
+
+        // ROE(%)
+        if (item.roe && item.roe > 0) {
+          html += '<td class="roe">' + item.roe.toFixed(2) + "</td>";
+        } else {
+          html += '<td class="no-data">--</td>';
+        }
+
+        // 2026预测净利(亿)
+        if (item.forecastProfit && item.forecastProfit > 0) {
+          html += '<td class="forecast-profit">' + item.forecastProfit.toFixed(2) + "</td>";
+        } else {
+          html += '<td class="no-data">--</td>';
+        }
+
+        // 2026预测同比(%)
+        if (item.forecastYoy > 0) {
+          html += '<td class="forecast-yoy change-up">+' + item.forecastYoy.toFixed(2) + "%</td>";
+        } else if (item.forecastYoy < 0) {
+          html += '<td class="forecast-yoy change-down">' + item.forecastYoy.toFixed(2) + "%</td>";
+        } else if (item.forecastProfit > 0) {
+          html += '<td class="forecast-yoy change-zero">0.00%</td>';
+        } else {
+          html += '<td class="no-data">--</td>';
+        }
+
+        // 总市值
+        if (item.cap && item.cap > 0) {
+          html += '<td class="cap">' + item.cap.toFixed(2) + "</td>";
+        } else {
+          html += '<td class="no-data">--</td>';
+        }
+
+        html += "</tr>";
+      });
+
+      html += "</tbody></table>";
+      container.innerHTML = html;
+    }
+
+    // ============================================================
+    // 排序切换
+    // ============================================================
+    window.sortBy = function (key) {
+      if (sortKey === key) {
+        sortAsc = !sortAsc;
+      } else {
+        sortKey = key;
+        // 数字列默认降序，文字列默认升序
+        if (key === "price" || key === "change" || key === "cap" || key === "pe" || key === "ytd" || key === "roe" || key === "forecastProfit" || key === "forecastYoy") {
+          sortAsc = false;
+        } else {
+          sortAsc = true;
+        }
+      }
+      applyAll();
+      renderTable();
+    };
+
+    // ============================================================
+    // 会员登录
+    // ============================================================
+    // 会员密码的 SHA-256 哈希（默认密码: stock888）
+    var MEMBER_PWD_HASH = "24b330271a3051952024dfea28cea8bc7bb1a8c5bb67ac5b495a782fe1d3b7de";
+    var STORAGE_KEY = "stockboard_member";
+
+    function isLoggedIn() {
+      return localStorage.getItem(STORAGE_KEY) === "true";
+    }
+
+    function updateUI() {
+      var logged = isLoggedIn();
+      var btn = document.getElementById("btnDownload");
+      var btnLogin = document.getElementById("btnLogin");
+      var badge = document.getElementById("memberBadge");
+
+      if (logged) {
+        btn.className = "btn-download";
+        btn.innerHTML = "📥 下载 Excel";
+        btnLogin.style.display = "none";
+        badge.style.display = "inline-flex";
+      } else {
+        btn.className = "btn-download locked";
+        btn.innerHTML = "🔒 下载 Excel";
+        btnLogin.style.display = "inline-block";
+        badge.style.display = "none";
+      }
+    }
+
+    async function doLogin() {
+      var pwd = document.getElementById("loginPwd").value.trim();
+      if (!pwd) return;
+      
+      var hash = await sha256(pwd);
+      if (hash === MEMBER_PWD_HASH) {
+        localStorage.setItem(STORAGE_KEY, "true");
+        hideLogin();
+        updateUI();
+        showToast("✅ 登录成功，已解锁下载权限");
+      } else {
+        document.getElementById("loginError").style.display = "block";
+        document.getElementById("loginPwd").value = "";
+      }
+    }
+
+    function doLogout() {
+      localStorage.removeItem(STORAGE_KEY);
+      updateUI();
+      showToast("已退出会员");
+    }
+
+    function showLogin() {
+      document.getElementById("loginOverlay").classList.add("show");
+      document.getElementById("loginPwd").value = "";
+      document.getElementById("loginError").style.display = "none";
+      setTimeout(function () { document.getElementById("loginPwd").focus(); }, 200);
+    }
+
+    function hideLogin() {
+      document.getElementById("loginOverlay").classList.remove("show");
+    }
+
+    function handleDownload() {
+      if (isLoggedIn()) {
+        downloadExcel();
+      } else {
+        showLogin();
+      }
+    }
+
+    // SHA-256 hash (纯 JS, 无依赖)
+    async function sha256(message) {
+      var msgBuffer = new TextEncoder().encode(message);
+      var hashBuffer = await crypto.subtle.digest("SHA-256", msgBuffer);
+      var hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(function (b) { return b.toString(16).padStart(2, "0"); }).join("");
+    }
+
+    // ============================================================
+    // Excel 下载
+    // ============================================================
+    window.downloadExcel = function () {
+      if (filteredData.length === 0) {
+        showToast("没有数据可下载");
+        return;
+      }
+
+      // 构建导出数据
+      var exportData = filteredData.map(function (item) {
+        return {
+          "一级行业": item.industry1 || "",
+          "二级行业": item.industry2 || "",
+          "三级行业": item.industry3 || "",
+          "股票代码": item.code,
+          "股票名称": item.name,
+          "热门概念": item.concept || "",
+          "主营构成(按产品)": item.biz || "",
+          "收盘价": item.price || "--",
+          "涨跌幅(%)": item.change != null ? item.change : "--",
+          "年初至今(%)": item.ytd != null ? item.ytd : "--",
+          "PE(TTM)": item.pe || "--",
+          "ROE(%)": item.roe || "--",
+          "2026预测净利(亿)": item.forecastProfit || "--",
+          "2026预测EPS(元)": item.forecastEps || "--",
+          "2026预测同比(%)": item.forecastYoy != null ? item.forecastYoy : "--",
+          "总市值(亿元)": item.cap || "--",
+        };
+      });
+
+      // 使用 SheetJS 创��工作簿
+      var ws = XLSX.utils.json_to_sheet(exportData);
+
+      // 设置列宽
+      ws["!cols"] = [
+        { wch: 16 },
+        { wch: 18 },
+        { wch: 20 },
+        { wch: 12 },
+        { wch: 12 },
+        { wch: 24 },
+        { wch: 22 },
+        { wch: 10 },
+        { wch: 12 },
+        { wch: 12 },
+        { wch: 14 },
+        { wch: 10 },
+        { wch: 16 },
+        { wch: 14 },
+        { wch: 10 },
+      ];
+
+      var wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "A股行情");
+
+      // 生成文件名
+      var today = new Date();
+      var dateStr = today.getFullYear()
+        + "-" + String(today.getMonth() + 1).padStart(2, "0")
+        + "-" + String(today.getDate()).padStart(2, "0");
+      var fileName = "A股行情_" + dateStr + ".xlsx";
+
+      // 触发下载
+      XLSX.writeFile(wb, fileName);
+      showToast("Excel 下载成功: " + fileName);
+    };
+
+    // ============================================================
+    // 工具函数
+    // ============================================================
+    function escapeHtml(str) {
+      if (!str) return "";
+      var div = document.createElement("div");
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function escapeAttr(str) {
+      if (!str) return "";
+      return str.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    function showToast(msg) {
+      var toast = document.getElementById("toast");
+      toast.textContent = msg;
+      toast.classList.add("show");
+      setTimeout(function () {
+        toast.classList.remove("show");
+      }, 2000);
+    }
+
+    function showError(msg) {
+      var container = document.getElementById("tableContainer");
+      container.innerHTML = '<div class="error-message">'
+        + escapeHtml(msg)
+        + '<br><span class="retry-link" onclick="location.reload()">点击重试</span>'
+        + "</div>";
+    }
+
+    // ============================================================
+    // 行业对照表
+    // ============================================================
+    function buildHierarchy() {
+      // 从 allData 构建 L1 → L2 → L3 的层级树
+      var tree = {};  // L1 → { L2 → Set of L3 }
+
+      allData.forEach(function (item) {
+        var l1 = (item.industry1 || "").trim();
+        var l2 = (item.industry2 || "").trim();
+        var l3 = (item.industry3 || "").trim();
+        if (!l1) return;
+        if (!l2) return;
+        if (!tree[l1]) { tree[l1] = {}; }
+        if (!tree[l1][l2]) { tree[l1][l2] = new Set(); }
+        if (l3) tree[l1][l2].add(l3);
+      });
+
+      return tree;
+    }
+
+    function renderHierarchy() {
+      var tree = buildHierarchy();
+      var l1Cap = window._l1CapMap || {};
+      var l2Cap = window._l2CapMap || {};
+      var l3Cap = window._l3CapMap || {};
+
+      // 一级行业排序：含"其他"的排最后，其余按总市值降序
+      var l1Keys = sortIndustriesByCap(Object.keys(tree), l1Cap);
+
+      // 统计汇总
+      var totalL1 = l1Keys.length;
+      var totalL2 = 0, totalL3 = 0;
+      l1Keys.forEach(function (l1) {
+        var l2Keys = Object.keys(tree[l1]);
+        totalL2 += l2Keys.length;
+        l2Keys.forEach(function (l2) { totalL3 += tree[l1][l2].size; });
+      });
+
+      document.getElementById("hierarchyStats").textContent =
+        "一级行业数" + totalL1 + "个  |  二级行业数" + totalL2 + "个  |  三级行业数" + totalL3 + "个";
+
+      var html = "";
+
+      l1Keys.forEach(function (l1, idx) {
+        var l2Map = tree[l1];
+        // 二级行业排序：含"其他"的排最后，其余按总市值降序
+        var l2Keys = sortIndustriesByCap(Object.keys(l2Map), l2Cap);
+
+        html += '<div class="hierarchy-row">';
+        html += '<span class="hierarchy-l1-label">' + escapeHtml(l1) + '</span>';
+
+        l2Keys.forEach(function (l2, j) {
+          var l3Set = l2Map[l2];
+          var l3Count = l3Set.size;
+          // 三级行业排序：含"其他"的排最后，其余按总市值降序
+          var l3List = sortIndustriesByCap(Array.from(l3Set), l3Cap);
+          var l3Json = JSON.stringify(l3List).replace(/"/g, '&quot;');
+
+          html += '<span class="hierarchy-l2-chip">';
+          html += '<span class="l2-name">' + escapeHtml(l2) + '</span>';
+          html += '<span class="l3-count" onclick="toggleL3(event,this,' + l3Json + ')" title="点击查看三级行业">' + l3Count + '</span>';
+          html += '</span>';
+        });
+
+        html += '</div>';
+      });
+
+      document.getElementById("hierarchyBody").innerHTML = html;
+    }
+
+    // 全局弹窗引用
+    var popoverEl = null;
+    var activeBadge = null;
+
+    // 点击数字弹出三级行业浮动层
+    function toggleL3(event, el, l3Data) {
+      event.stopPropagation();
+
+      if (!popoverEl) {
+        popoverEl = document.getElementById("hierarchyPopover");
+      }
+
+      // 如果点击同一个 badge，关闭弹窗
+      if (activeBadge === el && popoverEl.classList.contains("show")) {
+        closePopover();
+        return;
+      }
+
+      // 关闭之前的
+      closePopover();
+
+      // 填充内容
+      var tags = l3Data.map(function (name) {
+        return '<span class="l3-tag">' + escapeHtml(name) + '</span>';
+      }).join("");
+      document.getElementById("popoverContent").innerHTML = tags;
+
+      // 定位弹窗
+      var rect = el.getBoundingClientRect();
+      var popoverWidth = 360;
+      var left = rect.left + (rect.width / 2) - (popoverWidth / 2);
+      // 保持在屏幕范围内
+      if (left < 10) left = 10;
+      if (left + popoverWidth > window.innerWidth - 10) left = window.innerWidth - popoverWidth - 10;
+
+      var top = rect.bottom + 10;
+      // 如果下方空间不够，显示在上方
+      if (top + 200 > window.innerHeight) {
+        top = rect.top - 10;
+        popoverEl.querySelector(".popover-arrow").style.top = "auto";
+        popoverEl.querySelector(".popover-arrow").style.bottom = "-8px";
+        popoverEl.querySelector(".popover-arrow").style.borderTop = "none";
+        popoverEl.querySelector(".popover-arrow").style.borderBottom = "1px solid #d0d0d0";
+        popoverEl.querySelector(".popover-arrow").style.borderRight = "1px solid #d0d0d0";
+      } else {
+        popoverEl.querySelector(".popover-arrow").style.top = "-8px";
+        popoverEl.querySelector(".popover-arrow").style.bottom = "auto";
+        popoverEl.querySelector(".popover-arrow").style.borderTop = "1px solid #d0d0d0";
+        popoverEl.querySelector(".popover-arrow").style.borderBottom = "none";
+        popoverEl.querySelector(".popover-arrow").style.borderRight = "none";
+        popoverEl.querySelector(".popover-arrow").style.borderLeft = "1px solid #d0d0d0";
+      }
+
+      popoverEl.style.left = left + "px";
+      popoverEl.style.top = top + "px";
+      popoverEl.classList.add("show");
+      el.classList.add("active");
+      activeBadge = el;
+    }
+
+    function closePopover() {
+      if (popoverEl) popoverEl.classList.remove("show");
+      if (activeBadge) {
+        activeBadge.classList.remove("active");
+        activeBadge = null;
+      }
+    }
+
+    // 点击页面其他地方关闭弹窗
+    document.addEventListener("click", function (e) {
+      if (popoverEl && popoverEl.classList.contains("show")) {
+        if (!popoverEl.contains(e.target) && !e.target.classList.contains("l3-count")) {
+          closePopover();
+        }
+      }
+    });
+
+    window.toggleL3 = toggleL3;
+
+    function toggleHierarchy() {
+      var body = document.getElementById("hierarchyBody");
+      var toggle = document.getElementById("hierarchyToggle");
+      if (body.classList.contains("collapsed")) {
+        body.classList.remove("collapsed");
+        toggle.classList.add("open");
+      } else {
+        body.classList.add("collapsed");
+        toggle.classList.remove("open");
+      }
+    }
+
+    window.toggleHierarchy = toggleHierarchy;
+    window.onFilterL1Change = onFilterL1Change;
+    window.onFilterL2Change = onFilterL2Change;
+    window.onFilterL3Change = onFilterL3Change;
+    window.resetFilters = resetFilters;
+    window.onSearch = onSearch;
+    window.sortBy = window.sortBy;
+    window.showLogin = showLogin;
+    window.hideLogin = hideLogin;
+    window.doLogin = doLogin;
+    window.doLogout = doLogout;
+    window.handleDownload = handleDownload;
+    window.downloadExcel = window.downloadExcel;
+
+    // ============================================================
+    // 启动
+    // ============================================================
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", init);
+    } else {
+      init();
+    }
+  })();
+  </script>
+</body>
+</html>
