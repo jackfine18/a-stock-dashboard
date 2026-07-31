@@ -390,6 +390,7 @@
       overflow-x: auto;
       max-height: 70vh;
       overflow-y: auto;
+      contain: layout style paint;
     }
 
     table {
@@ -455,6 +456,12 @@
 
     tbody tr:hover {
       background: var(--row-hover);
+    }
+
+    /* 虚拟滚动：仅渲染可见行，避免5500+行同时渲染导致浏览器崩溃 */
+    tbody tr {
+      content-visibility: auto;
+      contain-intrinsic-size: auto 36px;
     }
 
     td.industry {
