@@ -390,7 +390,6 @@
       overflow-x: auto;
       max-height: 70vh;
       overflow-y: auto;
-      contain: layout style paint;
     }
 
     table {
@@ -456,12 +455,6 @@
 
     tbody tr:hover {
       background: var(--row-hover);
-    }
-
-    /* 虚拟滚动：仅渲染可见行，避免5500+行同时渲染导致浏览器崩溃 */
-    tbody tr {
-      content-visibility: auto;
-      contain-intrinsic-size: auto 36px;
     }
 
     td.industry {
@@ -1330,6 +1323,111 @@
     // ============================================================
     // 表格渲染
     // ============================================================
+    // ============================================================
+    // 虚拟滚动表格渲染
+    // 只渲染视口内可见的行（上下各留缓冲），用占位行撑起滚动高度。
+    // 避免 5500+ 行 × 15 列一次性生成 8 万+ DOM 节点导致浏览器崩溃。
+    // ============================================================
+    var VIRTUAL_ROW_HEIGHT = 37; // 行高估计值(px)，首次渲染后自动校准
+    var VIRTUAL_BUFFER = 30;     // 视口上下额外渲染的行数
+    var VIRTUAL_COLSPAN = 15;    // 占位单元格跨列数，与列数一致
+
+    function buildRowHtml(item) {
+      var html = "<tr>";
+
+      // 行业（带 tooltip）
+      var ind1 = item.industry1 || "--";
+      var ind2 = item.industry2 || "--";
+      var ind3 = item.industry3 || "--";
+      html += '<td class="industry" title="' + escapeAttr(ind1) + '">' + escapeHtml(ind1) + "</td>";
+      html += '<td class="industry" title="' + escapeAttr(ind2) + '">' + escapeHtml(ind2) + "</td>";
+      html += '<td class="industry" title="' + escapeAttr(ind3) + '">' + escapeHtml(ind3) + "</td>";
+
+      // 代码和名称
+      html += '<td class="code">' + escapeHtml(item.code) + "</td>";
+      html += '<td class="name" title="' + escapeAttr(item.name) + '">' + escapeHtml(item.name) + "</td>";
+
+      // 热门概念（带 tooltip）
+      var concept = item.concept || "--";
+      html += '<td class="industry" title="' + escapeAttr(concept) + '">' + escapeHtml(concept) + "</td>";
+
+      // 主营构成（带 tooltip）
+      var biz = item.biz || "--";
+      html += '<td class="industry" title="' + escapeAttr(biz) + '">' + escapeHtml(biz) + "</td>";
+
+      // 收盘价
+      if (item.price && item.price > 0) {
+        html += '<td class="price">' + item.price.toFixed(2) + "</td>";
+      } else {
+        html += '<td class="no-data">--</td>';
+      }
+
+      // 涨跌幅
+      if (item.change > 0) {
+        html += '<td class="change-up">+' + item.change.toFixed(2) + "%</td>";
+      } else if (item.change < 0) {
+        html += '<td class="change-down">' + item.change.toFixed(2) + "%</td>";
+      } else if (item.price > 0) {
+        html += '<td class="change-zero">0.00%</td>';
+      } else {
+        html += '<td class="no-data">--</td>';
+      }
+
+      // 年初至今涨幅
+      var ytd = item.ytd;
+      if (ytd > 0) {
+        html += '<td class="ytd-up">+' + ytd.toFixed(2) + "%</td>";
+      } else if (ytd < 0) {
+        html += '<td class="ytd-down">' + ytd.toFixed(2) + "%</td>";
+      } else if (item.price > 0) {
+        html += '<td class="ytd-zero">0.00%</td>';
+      } else {
+        html += '<td class="no-data">--</td>';
+      }
+
+      // PE(TTM)
+      if (item.pe && item.pe > 0) {
+        html += '<td class="pe">' + item.pe.toFixed(2) + "</td>";
+      } else {
+        html += '<td class="no-data">--</td>';
+      }
+
+      // ROE(%)
+      if (item.roe && item.roe > 0) {
+        html += '<td class="roe">' + item.roe.toFixed(2) + "</td>";
+      } else {
+        html += '<td class="no-data">--</td>';
+      }
+
+      // 2026预测净利(亿)
+      if (item.forecastProfit && item.forecastProfit > 0) {
+        html += '<td class="forecast-profit">' + item.forecastProfit.toFixed(2) + "</td>";
+      } else {
+        html += '<td class="no-data">--</td>';
+      }
+
+      // 2026预测同比(%)
+      if (item.forecastYoy > 0) {
+        html += '<td class="forecast-yoy change-up">+' + item.forecastYoy.toFixed(2) + "%</td>";
+      } else if (item.forecastYoy < 0) {
+        html += '<td class="forecast-yoy change-down">' + item.forecastYoy.toFixed(2) + "%</td>";
+      } else if (item.forecastProfit > 0) {
+        html += '<td class="forecast-yoy change-zero">0.00%</td>';
+      } else {
+        html += '<td class="no-data">--</td>';
+      }
+
+      // 总市值
+      if (item.cap && item.cap > 0) {
+        html += '<td class="cap">' + item.cap.toFixed(2) + "</td>";
+      } else {
+        html += '<td class="no-data">--</td>';
+      }
+
+      html += "</tr>";
+      return html;
+    }
+
     function renderTable() {
       var container = document.getElementById("tableContainer");
 
@@ -1337,8 +1435,6 @@
         container.innerHTML = '<div class="loading-overlay"><span>没有匹配的数据</span></div>';
         return;
       }
-
-      var html = '<table><thead><tr>';
 
       // 表头定义
       var columns = [
@@ -1359,6 +1455,7 @@
         { key: "cap", label: "总市值(亿)", classes: "" },
       ];
 
+      var html = '<table><thead><tr>';
       columns.forEach(function (col) {
         var cls = "sortable";
         if (sortKey === col.key) {
@@ -1367,107 +1464,57 @@
         html += '<th class="' + cls + '" onclick="sortBy(\'' + col.key + '\')">'
           + col.label + '<span class="sort-icon"></span></th>';
       });
-
-      html += "</tr></thead><tbody>";
-
-      filteredData.forEach(function (item) {
-        html += "<tr>";
-
-        // 行业（带 tooltip）
-        var ind1 = item.industry1 || "--";
-        var ind2 = item.industry2 || "--";
-        var ind3 = item.industry3 || "--";
-        html += '<td class="industry" title="' + escapeAttr(ind1) + '">' + escapeHtml(ind1) + "</td>";
-        html += '<td class="industry" title="' + escapeAttr(ind2) + '">' + escapeHtml(ind2) + "</td>";
-        html += '<td class="industry" title="' + escapeAttr(ind3) + '">' + escapeHtml(ind3) + "</td>";
-
-        // 代码和名称
-        html += '<td class="code">' + escapeHtml(item.code) + "</td>";
-        html += '<td class="name" title="' + escapeAttr(item.name) + '">' + escapeHtml(item.name) + "</td>";
-
-        // 热门概念（带 tooltip）
-        var concept = item.concept || "--";
-        html += '<td class="industry" title="' + escapeAttr(concept) + '">' + escapeHtml(concept) + "</td>";
-
-        // 主营构成（带 tooltip）
-        var biz = item.biz || "--";
-        html += '<td class="industry" title="' + escapeAttr(biz) + '">' + escapeHtml(biz) + "</td>";
-
-        // 收盘价
-        if (item.price && item.price > 0) {
-          html += '<td class="price">' + item.price.toFixed(2) + "</td>";
-        } else {
-          html += '<td class="no-data">--</td>';
-        }
-
-        // 涨跌幅
-        if (item.change > 0) {
-          html += '<td class="change-up">+' + item.change.toFixed(2) + "%</td>";
-        } else if (item.change < 0) {
-          html += '<td class="change-down">' + item.change.toFixed(2) + "%</td>";
-        } else if (item.price > 0) {
-          html += '<td class="change-zero">0.00%</td>';
-        } else {
-          html += '<td class="no-data">--</td>';
-        }
-
-        // 年初至今涨幅
-        var ytd = item.ytd;
-        if (ytd > 0) {
-          html += '<td class="ytd-up">+' + ytd.toFixed(2) + "%</td>";
-        } else if (ytd < 0) {
-          html += '<td class="ytd-down">' + ytd.toFixed(2) + "%</td>";
-        } else if (item.price > 0) {
-          html += '<td class="ytd-zero">0.00%</td>';
-        } else {
-          html += '<td class="no-data">--</td>';
-        }
-
-        // PE(TTM)
-        if (item.pe && item.pe > 0) {
-          html += '<td class="pe">' + item.pe.toFixed(2) + "</td>";
-        } else {
-          html += '<td class="no-data">--</td>';
-        }
-
-        // ROE(%)
-        if (item.roe && item.roe > 0) {
-          html += '<td class="roe">' + item.roe.toFixed(2) + "</td>";
-        } else {
-          html += '<td class="no-data">--</td>';
-        }
-
-        // 2026预测净利(亿)
-        if (item.forecastProfit && item.forecastProfit > 0) {
-          html += '<td class="forecast-profit">' + item.forecastProfit.toFixed(2) + "</td>";
-        } else {
-          html += '<td class="no-data">--</td>';
-        }
-
-        // 2026预测同比(%)
-        if (item.forecastYoy > 0) {
-          html += '<td class="forecast-yoy change-up">+' + item.forecastYoy.toFixed(2) + "%</td>";
-        } else if (item.forecastYoy < 0) {
-          html += '<td class="forecast-yoy change-down">' + item.forecastYoy.toFixed(2) + "%</td>";
-        } else if (item.forecastProfit > 0) {
-          html += '<td class="forecast-yoy change-zero">0.00%</td>';
-        } else {
-          html += '<td class="no-data">--</td>';
-        }
-
-        // 总市值
-        if (item.cap && item.cap > 0) {
-          html += '<td class="cap">' + item.cap.toFixed(2) + "</td>";
-        } else {
-          html += '<td class="no-data">--</td>';
-        }
-
-        html += "</tr>";
-      });
-
-      html += "</tbody></table>";
+      // 仅创建空 tbody，由 updateVisibleRows 按需填充可见行
+      html += '</tr></thead><tbody id="virtualTbody"></tbody></table>';
       container.innerHTML = html;
+
+      updateVisibleRows();
     }
+
+    // 只渲染视口内可见的行，上下占位行撑起滚动总高度
+    function updateVisibleRows() {
+      var tbody = document.getElementById("virtualTbody");
+      var container = document.getElementById("tableContainer");
+      if (!tbody || !container || filteredData.length === 0) return;
+
+      var scrollTop = container.scrollTop;
+      var viewportH = container.clientHeight || window.innerHeight;
+
+      var startIdx = Math.max(0, Math.floor(scrollTop / VIRTUAL_ROW_HEIGHT) - VIRTUAL_BUFFER);
+      var endIdx = Math.min(filteredData.length, Math.ceil((scrollTop + viewportH) / VIRTUAL_ROW_HEIGHT) + VIRTUAL_BUFFER);
+
+      var html = "";
+      if (startIdx > 0) {
+        html += '<tr class="vspacer"><td colspan="' + VIRTUAL_COLSPAN
+          + '" style="height:' + (startIdx * VIRTUAL_ROW_HEIGHT) + 'px;padding:0;border:0;"></td></tr>';
+      }
+      for (var i = startIdx; i < endIdx; i++) {
+        html += buildRowHtml(filteredData[i]);
+      }
+      if (endIdx < filteredData.length) {
+        html += '<tr class="vspacer"><td colspan="' + VIRTUAL_COLSPAN
+          + '" style="height:' + ((filteredData.length - endIdx) * VIRTUAL_ROW_HEIGHT) + 'px;padding:0;border:0;"></td></tr>';
+      }
+      tbody.innerHTML = html;
+
+      // 动态校准行高，保证滚动位置准确
+      var realRow = tbody.querySelector("tr:not(.vspacer)");
+      if (realRow) {
+        var h = realRow.offsetHeight;
+        if (h > 0) VIRTUAL_ROW_HEIGHT = h;
+      }
+    }
+
+    // 滚动时只重绘可见行（requestAnimationFrame 节流）
+    var virtualScrollPending = false;
+    document.getElementById("tableContainer").addEventListener("scroll", function () {
+      if (virtualScrollPending) return;
+      virtualScrollPending = true;
+      requestAnimationFrame(function () {
+        virtualScrollPending = false;
+        updateVisibleRows();
+      });
+    });
 
     // ============================================================
     // 排序切换
