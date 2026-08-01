@@ -1648,6 +1648,9 @@
       // 使用 SheetJS 创��工作簿
       var ws = XLSX.utils.json_to_sheet(exportData);
 
+      // 冻结首行（表头），滚动时表头固定
+      ws["!freeze"] = { xSplit: 0, ySplit: 1, topLeftCell: "A2" };
+
       // 设置列宽
       ws["!cols"] = [
         { wch: 16 },
