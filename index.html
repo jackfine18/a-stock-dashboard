@@ -1406,7 +1406,7 @@
         html += '<td class="no-data">--</td>';
       }
 
-      // 2026预测同比(%)
+      // 2026预测EPS同比(%)（(2026预测EPS-2025实际EPS)/2025实际EPS，东方财富一致预期）
       if (item.forecastYoy > 0) {
         html += '<td class="forecast-yoy change-up">+' + item.forecastYoy.toFixed(2) + "%</td>";
       } else if (item.forecastYoy < 0) {
@@ -1451,7 +1451,7 @@
         { key: "pe", label: "PE(TTM)", classes: "" },
         { key: "roe", label: "ROE(%)", classes: "" },
         { key: "forecastProfit", label: "2026预测净利(亿)", classes: "" },
-        { key: "forecastYoy", label: "2026预测同比(%)", classes: "" },
+        { key: "forecastYoy", label: "2026预测EPS同比(%)", classes: "" },
         { key: "cap", label: "总市值(亿)", classes: "" },
       ];
 
@@ -1640,7 +1640,7 @@
           "ROE(%)": item.roe || "--",
           "2026预测净利(亿)": item.forecastProfit || "--",
           "2026预测EPS(元)": item.forecastEps || "--",
-          "2026预测同比(%)": item.forecastYoy != null ? item.forecastYoy : "--",
+          "2026预测EPS同比(%)": item.forecastYoy != null ? item.forecastYoy : "--",
           "总市值(亿元)": item.cap || "--",
         };
       });
